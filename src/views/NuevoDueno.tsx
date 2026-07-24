@@ -1,20 +1,28 @@
 /**
- * Vista "Nuevo dueño" — formulario controlado (R01).
+ * Vista "Nuevo dueño" — form controlado (R01) + useRef (R03).
  *
  * Responsabilidades:
- * - Mantener valores del form en estado local (`useState`).
+ * - Mantener valores del form en estado local (`useState`) — R01.
  * - Derivar errores / validez en cada render (sin estado duplicado).
+ * - Autofocus y foco imperativo a campos vía `useRef` — R03.
+ * - Contar teclas en un ref mutable (sin re-render) — R03.
  * - Persistir vía `vetApi.crearDueno` cuando el form es válido.
  *
- * Dependencias: React (`useState`), `vetApi`, `validateOwnerForm`, CSS Module.
- * Relación: ruta `/duenos/nuevo`. R04 reemplazará/extenderá este flujo a wizard.
+ * Dependencias: React (`useState`, `useEffect`, `useRef`), `vetApi`, validación, CSS Module.
+ * Relación: ruta `/duenos/nuevo`. R04 extenderá a wizard con `useReducer`.
  *
- * Hook demostrado: `useState` (componentes controlados).
- * Patrón: Controlled Inputs + Derived State.
- * SOLID: SRP — la vista orquesta UI; la validación vive en `utils/`.
+ * Hooks: `useState` (R01) + `useRef` (R03).
+ * Patrón: Controlled Inputs + Imperative Handle via ref (foco DOM).
  */
 
-import { useState, type ChangeEvent, type FocusEvent, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FocusEvent,
+  type FormEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import { vetApi } from "../data/mockApi";
 import {
@@ -57,42 +65,69 @@ const FIELD_META: Array<{
 ];
 
 /**
- * Formulario de alta de dueño con inputs controlados y validación en vivo.
+ * Formulario de alta de dueño: controlado (R01) + refs de foco/mutable (R03).
  */
 export function NuevoDueno() {
-  /** Único estado de valores: un objeto, no un useState por campo. */
   const [form, setForm] = useState<OwnerFormValues>(INITIAL_FORM);
-  /** UI: qué campos el usuario ya tocó (para no gritar errores en vacío inicial). */
   const [touched, setTouched] = useState<TouchedMap>({});
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [createdOwnerId, setCreatedOwnerId] = useState<string | null>(null);
+  /** Solo para mostrar el valor del ref cuando el usuario lo pide (no en cada tecla). */
+  const [keystrokeDisplay, setKeystrokeDisplay] = useState<number | null>(null);
 
-  // --- Estado derivado (NO va en useState) ---
+  /**
+   * Refs de DOM (R03 — foco).
+   * Mapa de inputs para enfocar el primer campo con error sin re-render.
+   */
+  const fieldRefs = useRef<Partial<Record<FieldName, HTMLInputElement | null>>>({});
+
+  /**
+   * Valor mutable sin re-render (R03).
+   * Cada tecla incrementa el contador; la UI NO se actualiza hasta "Leer contador".
+   */
+  const keystrokesRef = useRef(0);
+
+  /**
+   * Espejo del form en un ref: útil si un callback async/timeout necesita
+   * el valor más reciente sin closures stale (patrón "ref as latest").
+   */
+  const formRef = useRef(form);
+  formRef.current = form;
+
   const errors = getOwnerFormErrors(form);
   const isValid = isOwnerFormValid(form);
 
+  /** Autofocus del primer campo al montar la vista (recepción → tipeo inmediato). */
+  useEffect(() => {
+    fieldRefs.current.nombre?.focus();
+  }, []);
+
   /**
-   * Actualiza un campo del form controlado.
-   * Pattern: spread + override — inmutabilidad superficial.
+   * Enfoca el primer campo con error de validación.
+   * Es imperativo (DOM) → useRef, no estado.
    */
+  function focusFirstInvalidField() {
+    const firstInvalid = FIELD_META.find((field) => errors[field.name]);
+    if (!firstInvalid) return;
+    setTouched((prev) => ({ ...prev, [firstInvalid.name]: true }));
+    fieldRefs.current[firstInvalid.name]?.focus();
+  }
+
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const { name, value } = event.target;
+    // Mutable: no setState del contador → no re-render extra por la métrica.
+    keystrokesRef.current += 1;
     setForm((prev) => ({ ...prev, [name]: value }));
     setServerError(null);
     setCreatedOwnerId(null);
   }
 
-  /** Marca el campo como tocado al salir (blur) para mostrar feedback. */
   function handleBlur(event: FocusEvent<HTMLInputElement>) {
     const name = event.target.name as FieldName;
     setTouched((prev) => ({ ...prev, [name]: true }));
   }
 
-  /**
-   * Submit: solo llega acá si el botón no está disabled (form válido).
-   * Defensa en profundidad: re-chequeamos isValid antes de llamar al mock.
-   */
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setTouched({
@@ -103,24 +138,34 @@ export function NuevoDueno() {
       direccion: true,
     });
 
-    if (!isValid || submitting) return;
+    if (!isValid) {
+      focusFirstInvalidField();
+      return;
+    }
+    if (submitting) return;
 
     setSubmitting(true);
     setServerError(null);
 
     try {
+      // Lee el snapshot más reciente vía ref (defensa ante closures stale).
+      const latest = formRef.current;
       const owner = await vetApi.crearDueno({
-        nombre: form.nombre.trim(),
-        apellido: form.apellido.trim(),
-        email: form.email.trim(),
-        telefono: form.telefono.trim(),
-        ...(form.direccion.trim()
-          ? { direccion: form.direccion.trim() }
+        nombre: latest.nombre.trim(),
+        apellido: latest.apellido.trim(),
+        email: latest.email.trim(),
+        telefono: latest.telefono.trim(),
+        ...(latest.direccion.trim()
+          ? { direccion: latest.direccion.trim() }
           : {}),
       });
       setCreatedOwnerId(owner.id);
       setForm(INITIAL_FORM);
       setTouched({});
+      keystrokesRef.current = 0;
+      setKeystrokeDisplay(null);
+      // Listo para el próximo alta: foco de vuelta al nombre.
+      queueMicrotask(() => fieldRefs.current.nombre?.focus());
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "No se pudo guardar el dueño.";
@@ -133,11 +178,12 @@ export function NuevoDueno() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R01 · useState</span>
+        <span className={styles.badge}>R01 · useState · R03 · useRef</span>
         <h1 className={styles.title}>Nuevo dueño</h1>
         <p className={styles.lead}>
-          Cada tecla actualiza el estado. Los errores se derivan en el render; el
-          submit solo se habilita cuando el form es válido.
+          R01: form controlado con validación derivada. R03: autofocus y foco al
+          primer error vía ref de DOM; contador de teclas en un ref mutable (sin
+          re-render por tecla).
         </p>
       </header>
 
@@ -176,6 +222,9 @@ export function NuevoDueno() {
                 value={form[field.name]}
                 onChange={handleChange}
                 onBlur={handleBlur}
+                ref={(node) => {
+                  fieldRefs.current[field.name] = node;
+                }}
                 aria-invalid={showError}
                 aria-describedby={showError ? `${inputId}-error` : undefined}
                 className={
@@ -202,8 +251,34 @@ export function NuevoDueno() {
             {submitting ? "Guardando…" : "Guardar dueño"}
           </button>
           {!isValid && (
-            <span className={styles.hint}>Completá los campos requeridos</span>
+            <button
+              type="button"
+              className={styles.secondaryBtn}
+              onClick={focusFirstInvalidField}
+            >
+              Ir al primer error
+            </button>
           )}
+        </div>
+
+        <div className={styles.refDemo}>
+          <p className={styles.hint}>
+            Contador de teclas vive en <code>keystrokesRef</code> (mutable, sin
+            re-render).
+            {keystrokeDisplay !== null && (
+              <>
+                {" "}
+                Última lectura: <strong>{keystrokeDisplay}</strong>
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            onClick={() => setKeystrokeDisplay(keystrokesRef.current)}
+          >
+            Leer contador (ref → state)
+          </button>
         </div>
       </form>
     </section>

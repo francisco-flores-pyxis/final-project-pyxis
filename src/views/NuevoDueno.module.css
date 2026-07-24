@@ -133,6 +133,37 @@
   color: var(--color-text-mute);
 }
 
+.secondaryBtn {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.secondaryBtn:hover {
+  background: var(--color-primary-50);
+  color: var(--color-primary-700);
+}
+
+.refDemo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.refDemo code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+}
+
 .success {
   margin: 0;
   padding: var(--space-3) var(--space-4);
