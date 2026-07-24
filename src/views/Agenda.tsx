@@ -1,27 +1,48 @@
 /**
- * Agenda — disponibilidad por veterinario (R06).
+ * Agenda — grilla performante (R06 datos + R07 memoización).
  *
  * Responsabilidades:
- * - Elegir fecha + vet.
- * - Mostrar slots vía `useDisponibilidad`.
- * - Reusar `useCitas` para el resumen del día (mismo hook que el Dashboard).
+ * - Elegir fecha + vet; cargar slots/citas.
+ * - Derivar el modelo de grilla con `useMemo` (filtro + labels + stats).
+ * - Pasar `onSelect` estable con `useCallback` a celdas `memo`.
+ * - Exponer un re-render del padre sin cambiar props de celdas (demo Profiler).
  *
- * Dependencias: useCitas, useDisponibilidad, vetApi (lista de vets).
- * Relación: ruta `/agenda`. R07 convertirá los slots en grilla memorizada.
+ * Dependencias: useCitas, useDisponibilidad, SlotCell, CSS Module.
+ * Relación: ruta `/agenda`.
  *
- * Hooks demostrados: custom hooks de datos (R06).
+ * Hooks: useMemo + useCallback + memo (R07).
+ * Patrón: derived model + memoized list items.
  */
 
-import { useEffect, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from "react";
+import { SlotCell } from "../components/agenda/SlotCell";
 import { vetApi } from "../data/mockApi";
-import type { Vet } from "../domain/models";
+import type { Slot, Vet } from "../domain/models";
 import { useCitas } from "../hooks/useCitas";
 import { useDisponibilidad } from "../hooks/useDisponibilidad";
 import { todayLocalISODate } from "../utils/date";
 import styles from "./Agenda.module.css";
 
+interface GridCell {
+  inicio: string;
+  label: string;
+  disponible: boolean;
+}
+
+interface GridModel {
+  cells: GridCell[];
+  libres: number;
+  ocupados: number;
+}
+
 /**
- * Formatea solo la hora de un slot.
+ * Formatea solo la hora de un slot (America/Montevideo).
  */
 function formatSlotTime(iso: string): string {
   return new Intl.DateTimeFormat("es-UY", {
@@ -32,13 +53,44 @@ function formatSlotTime(iso: string): string {
 }
 
 /**
- * Vista de agenda: slots del vet + resumen de citas del día.
+ * Cálculo derivado de la grilla a partir de slots crudos + filtro.
+ * Separado para poder medirlo/justificarlo en entrevista.
+ *
+ * @param slots Slots del mock.
+ * @param onlyFree Si true, oculta ocupados.
+ */
+function buildGridModel(slots: Slot[], onlyFree: boolean): GridModel {
+  const filtered = onlyFree ? slots.filter((s) => s.disponible) : slots;
+
+  // Trabajo O(n): map + conteos. En grillas grandes (multi-vet) esto crece.
+  const cells: GridCell[] = filtered.map((slot) => ({
+    inicio: slot.inicio,
+    label: formatSlotTime(slot.inicio),
+    disponible: slot.disponible,
+  }));
+
+  let libres = 0;
+  let ocupados = 0;
+  for (const cell of cells) {
+    if (cell.disponible) libres += 1;
+    else ocupados += 1;
+  }
+
+  return { cells, libres, ocupados };
+}
+
+/**
+ * Vista de agenda con grilla memorizada.
  */
 export function Agenda() {
   const [date, setDate] = useState(todayLocalISODate);
   const [vets, setVets] = useState<Vet[]>([]);
   const [vetsError, setVetsError] = useState<string | null>(null);
   const [vetId, setVetId] = useState<string>("");
+  const [onlyFree, setOnlyFree] = useState(false);
+  const [selectedInicio, setSelectedInicio] = useState<string | null>(null);
+  /** Estado UI no relacionado a las celdas: fuerza re-render del padre. */
+  const [parentRenderTick, setParentRenderTick] = useState(0);
 
   const {
     data: citas,
@@ -53,7 +105,6 @@ export function Agenda() {
     refetch: refetchSlots,
   } = useDisponibilidad(vetId || null, date);
 
-  /** Carga el catálogo de vets una vez (no es el foco de R06). */
   useEffect(() => {
     let cancelled = false;
     vetApi
@@ -74,13 +125,40 @@ export function Agenda() {
     };
   }, []);
 
-  function handleDateChange(event: ChangeEvent<HTMLInputElement>) {
-    setDate(event.target.value);
-  }
+  /**
+   * useMemo: no recalcular labels/conteos si `slots` y `onlyFree` no cambiaron.
+   * Aunque el padre re-renderice por `parentRenderTick`, este modelo se reutiliza.
+   */
+  const gridModel = useMemo(
+    () => buildGridModel(slots, onlyFree),
+    [slots, onlyFree],
+  );
 
-  function handleVetChange(event: ChangeEvent<HTMLSelectElement>) {
+  /**
+   * useCallback: misma referencia de función entre renders del padre.
+   * Sin esto, `memo(SlotCell)` vería un `onSelect` nuevo siempre → re-render total.
+   */
+  const handleSelectSlot = useCallback((inicio: string) => {
+    setSelectedInicio((prev) => (prev === inicio ? null : inicio));
+  }, []);
+
+  const handleDateChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
+    setDate(event.target.value);
+    setSelectedInicio(null);
+  }, []);
+
+  const handleVetChange = useCallback((event: ChangeEvent<HTMLSelectElement>) => {
     setVetId(event.target.value);
-  }
+    setSelectedInicio(null);
+  }, []);
+
+  const handleToggleOnlyFree = useCallback(() => {
+    setOnlyFree((prev) => !prev);
+  }, []);
+
+  const handleForceParentRender = useCallback(() => {
+    setParentRenderTick((n) => n + 1);
+  }, []);
 
   const loading = slotsLoading || citasLoading;
   const error = slotsError || citasError || vetsError;
@@ -88,11 +166,14 @@ export function Agenda() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R06 · useCitas / useDisponibilidad</span>
+        <span className={styles.badge}>
+          R07 · useMemo / useCallback / memo
+        </span>
         <h1 className={styles.title}>Agenda</h1>
         <p className={styles.lead}>
-          Misma fuente de citas que el Dashboard (<code>useCitas</code>) más
-          slots del vet (<code>useDisponibilidad</code>). R07 memorizará la grilla.
+          Grilla con modelo memorizado, celdas en <code>memo</code> y handlers
+          estables. Pulsá “Re-render padre”: las celdas no deberían repintarse
+          (Profiler / title de cada celda).
         </p>
       </header>
 
@@ -136,11 +217,38 @@ export function Agenda() {
         >
           Refetch slots
         </button>
+        <button
+          type="button"
+          className={onlyFree ? styles.filterActive : styles.refetchBtn}
+          onClick={handleToggleOnlyFree}
+          aria-pressed={onlyFree}
+        >
+          Solo libres
+        </button>
+        <button
+          type="button"
+          className={styles.refetchBtn}
+          onClick={handleForceParentRender}
+        >
+          Re-render padre ({parentRenderTick})
+        </button>
       </div>
 
       {!citasLoading && !citasError && (
         <p className={styles.summary}>
-          Citas del día (vía <code>useCitas</code>): <strong>{citas.length}</strong>
+          Citas del día: <strong>{citas.length}</strong>
+          {" · "}
+          Slots en grilla: <strong>{gridModel.cells.length}</strong>
+          {" · "}
+          Libres: <strong>{gridModel.libres}</strong>
+          {" · "}
+          Ocupados: <strong>{gridModel.ocupados}</strong>
+          {selectedInicio && (
+            <>
+              {" · "}
+              Selección: <strong>{formatSlotTime(selectedInicio)}</strong>
+            </>
+          )}
         </p>
       )}
 
@@ -156,23 +264,24 @@ export function Agenda() {
         </p>
       )}
 
-      {!slotsLoading && !slotsError && vetId && slots.length === 0 && (
-        <p className={styles.empty}>Sin franjas para este vet/día.</p>
+      {!slotsLoading && !slotsError && vetId && gridModel.cells.length === 0 && (
+        <p className={styles.empty}>Sin franjas para este filtro/vet/día.</p>
       )}
 
-      {!slotsLoading && !slotsError && slots.length > 0 && (
-        <ul className={styles.slotList}>
-          {slots.map((slot) => (
-            <li
-              key={slot.inicio}
-              className={`${styles.slot} ${
-                slot.disponible ? styles.slotLibre : styles.slotOcupado
-              }`}
-            >
-              {formatSlotTime(slot.inicio)}
-            </li>
+      {!slotsLoading && !slotsError && gridModel.cells.length > 0 && (
+        <div className={styles.slotList} role="list">
+          {gridModel.cells.map((cell) => (
+            <div key={cell.inicio} role="listitem">
+              <SlotCell
+                inicio={cell.inicio}
+                label={cell.label}
+                disponible={cell.disponible}
+                selected={selectedInicio === cell.inicio}
+                onSelect={handleSelectSlot}
+              />
+            </div>
           ))}
-        </ul>
+        </div>
       )}
     </section>
   );
