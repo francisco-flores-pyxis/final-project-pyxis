@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+- Nunca modifiques archivos innecesariamente.
+- Antes de crear un archivo verifica si ya existe.
+- Mantén un historial lógico de commits (como si cada paso fuera un commit).
+- No rompas funcionalidades existentes.
+- Reutiliza componentes antes de crear nuevos.
+- Mantén consistencia de nombres.
+- Ejecuta verificaciones de TypeScript y corrige errores antes de continuar.
+- Si detectas deuda técnica, descríbela antes de cambiarla.

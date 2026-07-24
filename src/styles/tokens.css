@@ -1,0 +1,106 @@
+/* src/styles/tokens.css — Design tokens VetLab (andamiaje del lab)
+ *
+ * Único archivo de estilos globales: reset mínimo + tokens + base de html/body.
+ * Los CSS Modules deben consumir únicamente var(--token); no hardcodear valores.
+ * Theming (R18): redefinir tokens en [data-theme="dark"] sin tocar los módulos.
+ */
+
+:root {
+  /* Brand */
+  --color-primary-50: #e6f7f4;
+  --color-primary-100: #b9ebe3;
+  --color-primary-300: #57c9b6;
+  --color-primary-500: #12a594;
+  --color-primary-600: #0e857a;
+  --color-primary-700: #0b6960;
+  --color-accent-500: #f4a259;
+
+  /* Semantic */
+  --color-success: #2e9e5b;
+  --color-warning: #d99a0b;
+  --color-danger: #d64545;
+  --color-info: #3b82f6;
+
+  /* Neutrals / surfaces */
+  --color-bg: #f7faf9;
+  --color-surface: #ffffff;
+  --color-border: #e2e8e6;
+  --color-text: #1a2b28;
+  --color-text-soft: #55635f;
+  --color-text-mute: #8a9691;
+
+  /* Spacing (4px) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-8: 3rem;
+  --space-10: 4rem;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+  --fs-2xl: 2.5rem;
+  --lh-tight: 1.2;
+  --lh-base: 1.55;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(16, 40, 36, 0.06);
+  --shadow-md: 0 4px 12px rgba(16, 40, 36, 0.1);
+  --shadow-lg: 0 12px 32px rgba(16, 40, 36, 0.14);
+
+  /* Layout & z */
+  --container-max: 1120px;
+  --z-modal: 1000;
+  --z-toast: 1100;
+  --sidebar-width: 240px;
+  --topbar-height: 56px;
+
+  /* Motion */
+  --transition-fast: 120ms ease;
+  --transition-base: 200ms ease;
+}
+
+[data-theme="dark"] {
+  --color-bg: #0f1615;
+  --color-surface: #16211f;
+  --color-border: #26332f;
+  --color-text: #eaf1ef;
+  --color-text-soft: #a7b4b0;
+  --color-text-mute: #6f7c78;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh-base);
+}
+
+#root {
+  min-height: 100vh;
+}
