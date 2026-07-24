@@ -192,6 +192,8 @@ export interface VetApi {
   getDisponibilidad(vetId: string, dateISO: string): Promise<Slot[]>;
   crearCita(input: NewAppointmentInput): Promise<Appointment>;
   cambiarEstadoCita(id: string, estado: EstadoCita): Promise<Appointment>;
+  /** Alta simple de dueño (R01). El wizard R04 usa `crearDuenoConMascota`. */
+  crearDueno(owner: Omit<Owner, "id" | "createdAt">): Promise<Owner>;
   crearDuenoConMascota(
     owner: Omit<Owner, "id" | "createdAt">,
     pet: Omit<Pet, "id" | "ownerId">,
@@ -392,6 +394,30 @@ export const vetApi: VetApi = {
     invalidate("disp:");
     invalidate(`historial:${apt.ownerId}`);
     return { ...apt };
+  },
+
+  async crearDueno(
+    ownerInput: Omit<Owner, "id" | "createdAt">,
+  ): Promise<Owner> {
+    await maybeFailMutation();
+    await delay(500);
+
+    const emailTaken = db.owners.some(
+      (o) => o.email.toLowerCase() === ownerInput.email.toLowerCase(),
+    );
+    if (emailTaken) {
+      throw new Error("Ya existe un dueño con ese email.");
+    }
+
+    const owner: Owner = {
+      ...ownerInput,
+      id: nextId("own"),
+      createdAt: new Date().toISOString(),
+    };
+
+    db.owners.push(owner);
+    invalidate("duenos:");
+    return owner;
   },
 
   async crearDuenoConMascota(
