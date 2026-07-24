@@ -3,15 +3,17 @@
  *
  * Responsabilidades:
  * - Componer topbar + sidebar + área de contenido (`<Outlet />`).
- * - Ofrecer navegación entre vistas placeholder del andamiaje.
+ * - Saludar al staff y togglear tema vía Context (R05).
  *
- * Dependencias: react-router-dom, tokens vía CSS Module.
- * Relación: envuelve todas las rutas en `AppRouter`. Session/Theme (R05) se inyectarán aquí.
+ * Dependencias: react-router-dom, SessionContext, ThemeContext, CSS Module.
+ * Relación: envuelve todas las rutas en `AppRouter`.
  *
  * No contiene lógica de negocio ni fetch.
  */
 
 import { NavLink, Outlet } from "react-router-dom";
+import { useSession } from "../context/SessionContext";
+import { useTheme } from "../context/ThemeContext";
 import styles from "./AppLayout.module.css";
 
 const NAV_ITEMS = [
@@ -24,17 +26,36 @@ const NAV_ITEMS = [
 ] as const;
 
 /**
- * Shell de aplicación con navegación lateral.
+ * Shell de aplicación con navegación lateral y topbar contextual.
  */
 export function AppLayout() {
+  const { staff } = useSession();
+  const { theme, toggleTheme } = useTheme();
+
   return (
     <div className={styles.shell}>
       <header className={styles.topbar}>
         <NavLink to="/" className={styles.brand}>
           Vet<span className={styles.brandMark}>Lab</span>
         </NavLink>
-        {/* Stub hasta R05 (SessionContext) */}
-        <span className={styles.staffStub}>Staff · (sesión en R05)</span>
+
+        <div className={styles.topbarActions}>
+          <span className={styles.staffGreeting}>
+            Hola, <strong>{staff.nombre}</strong>
+            <span className={styles.staffRol}> · {staff.rol}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.themeToggle}
+            onClick={toggleTheme}
+            aria-pressed={theme === "dark"}
+            aria-label={
+              theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"
+            }
+          >
+            {theme === "dark" ? "Tema claro" : "Tema oscuro"}
+          </button>
+        </div>
       </header>
 
       <nav className={styles.sidebar} aria-label="Navegación principal">
