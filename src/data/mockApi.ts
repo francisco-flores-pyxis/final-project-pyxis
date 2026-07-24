@@ -86,6 +86,19 @@ function invalidate(prefix: string): void {
   }
 }
 
+/**
+ * Invalida lecturas cacheadas (para `refetch` de hooks / tras mutaciones).
+ *
+ * @param prefix Prefijo de clave (`citas:`, `disp:`, …). Sin argumento limpia todo.
+ */
+export function invalidateMockCache(prefix?: string): void {
+  if (!prefix) {
+    promiseCache.clear();
+    return;
+  }
+  invalidate(prefix);
+}
+
 /** Genera un id simple con prefijo. */
 function nextId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;

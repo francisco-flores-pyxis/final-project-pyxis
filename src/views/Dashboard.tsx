@@ -1,49 +1,21 @@
 /**
- * Dashboard — citas del día (R02).
+ * Dashboard — citas del día (R02 + R06).
  *
  * Responsabilidades:
  * - Permitir elegir una fecha (hoy por defecto).
- * - Pedir las citas al mock al montar y al cambiar `date`.
- * - Mostrar loading / error / lista.
- * - Cancelar (ignorar) la respuesta anterior vía cleanup del effect.
+ * - Mostrar loading / error / lista vía `useCitas` (R06).
  *
- * Dependencias: React (`useState`, `useEffect`), `vetApi`, CSS Module.
- * Relación: ruta `/`. En R06 la lógica de fetch se extraerá a `useCitas`.
- *           En R08 se documentará el bug de keys por índice.
+ * Dependencias: `useCitas`, CSS Module.
+ * Relación: ruta `/`. R08 documentará keys; R15 acciones de estado.
  *
- * Hook demostrado: `useEffect` (sincronización con API + cleanup anti-race).
- * Patrón: Data fetching on mount/deps change.
- * SOLID: SRP — la vista orquesta UI; el mock encapsula I/O.
+ * Hooks: `useCitas` (custom) encapsula el useEffect + cleanup de R02.
  */
 
-import { useEffect, useState, type ChangeEvent } from "react";
-import { vetApi } from "../data/mockApi";
-import type { AppointmentView, EstadoCita } from "../domain/models";
+import { useState, type ChangeEvent } from "react";
+import type { EstadoCita } from "../domain/models";
+import { useCitas } from "../hooks/useCitas";
+import { todayLocalISODate } from "../utils/date";
 import styles from "./Dashboard.module.css";
-
-/**
- * Fecha local de hoy como `YYYY-MM-DD` (valor de `<input type="date">`).
- * Se usa hora local para no cruzar el día por UTC.
- */
-function todayLocalISODate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-/**
- * Convierte `YYYY-MM-DD` a ISO completo anclado al mediodía local.
- * Evita que el parseo UTC desplace el día civil.
- *
- * @param dateInput Valor del input date.
- */
-function dateInputToISO(dateInput: string): string {
-  const [y, m, d] = dateInput.split("-").map(Number);
-  const local = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, 12, 0, 0);
-  return local.toISOString();
-}
 
 /**
  * Formatea la hora de una cita en locale es-UY.
@@ -72,49 +44,11 @@ function estadoClass(estado: EstadoCita): string {
 }
 
 /**
- * Vista principal del día operativo: lista de citas con fetch + cleanup.
+ * Vista principal del día operativo.
  */
 export function Dashboard() {
   const [date, setDate] = useState(todayLocalISODate);
-  const [citas, setCitas] = useState<AppointmentView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  /**
-   * Effect de carga:
-   * - Depende de `date` (no array vacío: si no, datos viejos al cambiar día).
-   * - Cleanup marca `cancelled = true` para ignorar respuestas tardías
-   *   (race entre fechas / setState after unmount).
-   */
-  useEffect(() => {
-    let cancelled = false;
-
-    setLoading(true);
-    setError(null);
-
-    vetApi
-      .getCitasDelDia(dateInputToISO(date))
-      .then((data) => {
-        // Si el effect ya se limpió (cambio de fecha o unmount), no pintamos.
-        if (cancelled) return;
-        setCitas(data);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "No se pudieron cargar las citas.";
-        setError(message);
-        setCitas([]);
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [date]);
+  const { data: citas, loading, error, refetch } = useCitas(date);
 
   function handleDateChange(event: ChangeEvent<HTMLInputElement>) {
     setDate(event.target.value);
@@ -123,11 +57,11 @@ export function Dashboard() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R02 · useEffect</span>
+        <span className={styles.badge}>R02 · useEffect · R06 · useCitas</span>
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.lead}>
-          Citas del día pedidas al montar y al cambiar la fecha. El cleanup del
-          effect evita pintar datos de una request anterior (race).
+          La carga de citas vive en <code>useCitas</code> (cleanup anti-race
+          incluido). El Dashboard solo orquesta UI.
         </p>
       </header>
 
@@ -151,6 +85,14 @@ export function Dashboard() {
         >
           Hoy
         </button>
+        <button
+          type="button"
+          className={styles.todayBtn}
+          onClick={refetch}
+          disabled={loading}
+        >
+          Refetch
+        </button>
       </div>
 
       {loading && (
@@ -171,7 +113,6 @@ export function Dashboard() {
 
       {!loading && !error && citas.length > 0 && (
         <ul className={styles.list}>
-          {/* Keys por id (identidad). El bug del índice se demuesta en R08. */}
           {citas.map((cita) => (
             <li key={cita.id} className={styles.item}>
               <time className={styles.time} dateTime={cita.fechaHora}>
@@ -183,8 +124,8 @@ export function Dashboard() {
                   <span className={styles.meta}>({cita.pet.especie})</span>
                 </p>
                 <p className={styles.meta}>
-                  {cita.owner.nombre} {cita.owner.apellido} · {cita.service.nombre} ·{" "}
-                  {cita.vet.nombre}
+                  {cita.owner.nombre} {cita.owner.apellido} · {cita.service.nombre}{" "}
+                  · {cita.vet.nombre}
                 </p>
                 {cita.motivo && <p className={styles.meta}>{cita.motivo}</p>}
               </div>
