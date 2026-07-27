@@ -1,10 +1,11 @@
 /**
- * Fila de cita con estado local (R08) + apertura de detalle (R09).
+ * Fila de cita con estado local (R08) + detalle (R09) + acciones optimistas (R15).
  *
  * Responsabilidades:
  * - Mostrar datos de la cita.
  * - Nota local para demo de keys (R08).
- * - Botón para abrir modal de detalle (R09).
+ * - Botón de detalle (R09).
+ * - Forms de confirmar / completar / cancelar (R15).
  */
 
 import { useState, type ChangeEvent } from "react";
@@ -16,18 +17,45 @@ export interface CitaRowProps {
   formatTime: (iso: string) => string;
   estadoClass: (estado: EstadoCita) => string;
   onOpenDetail: (cita: AppointmentView) => void;
+  /** Action de form (R15) — el padre aplica useOptimistic antes de await. */
+  onCambiarEstado: (formData: FormData) => void | Promise<void>;
+  pending?: boolean;
+}
+
+function nextActions(estado: EstadoCita): EstadoCita[] {
+  switch (estado) {
+    case "pendiente":
+      return ["confirmada", "cancelada"];
+    case "confirmada":
+      return ["completada", "cancelada"];
+    default:
+      return [];
+  }
+}
+
+function labelFor(estado: EstadoCita): string {
+  const map: Record<EstadoCita, string> = {
+    pendiente: "Pendiente",
+    confirmada: "Confirmar",
+    completada: "Completar",
+    cancelada: "Cancelar",
+  };
+  return map[estado];
 }
 
 /**
- * Item de lista con input propio y acción de detalle.
+ * Item de lista con input propio y acciones de estado.
  */
 export function CitaRow({
   cita,
   formatTime,
   estadoClass,
   onOpenDetail,
+  onCambiarEstado,
+  pending = false,
 }: CitaRowProps) {
   const [notaLocal, setNotaLocal] = useState("");
+  const actions = nextActions(cita.estado);
 
   function handleNotaChange(event: ChangeEvent<HTMLInputElement>) {
     setNotaLocal(event.target.value);
@@ -60,13 +88,36 @@ export function CitaRow({
           placeholder="Escribí acá y después reordená/filtrá…"
           autoComplete="off"
         />
-        <button
-          type="button"
-          className={styles.detailBtn}
-          onClick={() => onOpenDetail(cita)}
-        >
-          Ver detalle
-        </button>
+        <div className={styles.rowActions}>
+          <button
+            type="button"
+            className={styles.detailBtn}
+            onClick={() => onOpenDetail(cita)}
+          >
+            Ver detalle
+          </button>
+          {actions.map((estado) => (
+            <form
+              key={estado}
+              action={onCambiarEstado}
+              className={styles.estadoForm}
+            >
+              <input type="hidden" name="id" value={cita.id} />
+              <input type="hidden" name="estado" value={estado} />
+              <button
+                type="submit"
+                className={
+                  estado === "cancelada"
+                    ? styles.actionDanger
+                    : styles.actionPrimary
+                }
+                disabled={pending}
+              >
+                {labelFor(estado)}
+              </button>
+            </form>
+          ))}
+        </div>
       </div>
       <span className={estadoClass(cita.estado)}>{cita.estado}</span>
     </li>

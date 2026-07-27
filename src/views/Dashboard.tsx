@@ -1,18 +1,32 @@
 /**
- * Dashboard — citas del día (R02 + R06 + R08 + R09).
+ * Dashboard — citas del día (R02 + R06 + R08 + R09 + R15).
  *
  * Responsabilidades:
  * - Cargar / filtrar / ordenar citas.
  * - Keys estables + demo del bug de índice (R08).
  * - Modal de detalle + toasts vía portals (R09).
+ * - Confirmar / completar / cancelar con useOptimistic (R15).
  *
- * Dependencias: useCitas, CitaRow, Modal, useToasts, CSS Module.
+ * Dependencias: useCitas, CitaRow, Modal, useToasts, cambiarEstadoCitaAction.
  */
 
-import { useCallback, useMemo, useState, type ChangeEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useState,
+  useTransition,
+  type ChangeEvent,
+} from "react";
+import {
+  cambiarEstadoCitaAction,
+  initialCambiarEstadoCitaState,
+} from "../actions/cambiarEstadoCita";
 import { CitaRow } from "../components/dashboard/CitaRow";
 import { Modal } from "../components/Modal";
 import { useToasts } from "../components/Toasts";
+import { mockConfig } from "../data/mockApi";
 import type { AppointmentView, EstadoCita } from "../domain/models";
 import { useCitas } from "../hooks/useCitas";
 import { todayLocalISODate } from "../utils/date";
@@ -20,6 +34,11 @@ import styles from "./Dashboard.module.css";
 
 type EstadoFiltro = "todas" | EstadoCita;
 type Orden = "hora-asc" | "hora-desc" | "vet";
+
+type OptimisticEstado = {
+  id: string;
+  estado: EstadoCita;
+};
 
 function formatTime(iso: string): string {
   return new Intl.DateTimeFormat("es-UY", {
@@ -67,6 +86,15 @@ function applyListTransforms(
   return list;
 }
 
+function applyOptimisticEstado(
+  current: AppointmentView[],
+  update: OptimisticEstado,
+): AppointmentView[] {
+  return current.map((c) =>
+    c.id === update.id ? { ...c, estado: update.estado } : c,
+  );
+}
+
 /**
  * Vista principal del día operativo.
  */
@@ -76,28 +104,87 @@ export function Dashboard() {
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todas");
   const [orden, setOrden] = useState<Orden>("hora-asc");
   const [useIndexKeys, setUseIndexKeys] = useState(false);
-  const [selectedCita, setSelectedCita] = useState<AppointmentView | null>(null);
+  const [failDemo, setFailDemo] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   const { data: citas, loading, error, refetch } = useCitas(date);
 
+  const [optimisticCitas, addOptimistic] = useOptimistic(
+    citas,
+    applyOptimisticEstado,
+  );
+
+  useEffect(() => {
+    mockConfig.mutationFailRate = failDemo ? 0.45 : 0;
+    return () => {
+      mockConfig.mutationFailRate = 0;
+    };
+  }, [failDemo]);
+
   const visibleCitas = useMemo(
-    () => applyListTransforms(citas, estadoFiltro, orden),
-    [citas, estadoFiltro, orden],
+    () => applyListTransforms(optimisticCitas, estadoFiltro, orden),
+    [optimisticCitas, estadoFiltro, orden],
+  );
+
+  const selectedCita = useMemo(
+    () =>
+      selectedId
+        ? (optimisticCitas.find((c) => c.id === selectedId) ?? null)
+        : null,
+    [optimisticCitas, selectedId],
   );
 
   const handleCloseModal = useCallback(() => {
-    setSelectedCita(null);
+    setSelectedId(null);
   }, []);
 
   const handleOpenDetail = useCallback(
     (cita: AppointmentView) => {
-      setSelectedCita(cita);
+      setSelectedId(cita.id);
       push({
         message: `Detalle de ${cita.pet.nombre} (portal #modal-root)`,
         tone: "info",
       });
     },
     [push],
+  );
+
+  /**
+   * Form action (R15): pinta el estado al instante; si la action falla, rollback.
+   * Envuelta en startTransition para que useOptimistic + isPending trabajen juntos.
+   */
+  const handleCambiarEstado = useCallback(
+    (formData: FormData) => {
+      const id = String(formData.get("id") ?? "").trim();
+      const estado = String(formData.get("estado") ?? "").trim() as EstadoCita;
+      if (!id || !estado) return;
+
+      startTransition(async () => {
+        addOptimistic({ id, estado });
+
+        const result = await cambiarEstadoCitaAction(
+          initialCambiarEstadoCitaState,
+          formData,
+        );
+
+        if (!result.ok) {
+          push({
+            message: result.message ?? "No se pudo actualizar la cita.",
+            tone: "danger",
+          });
+          // Sin refetch: `citas` no cambia → useOptimistic revierte al terminar.
+          return;
+        }
+
+        push({
+          message: result.message ?? "Estado actualizado.",
+          tone: "success",
+        });
+        refetch();
+      });
+    },
+    [addOptimistic, push, refetch],
   );
 
   function handleDateChange(event: ChangeEvent<HTMLInputElement>) {
@@ -107,14 +194,27 @@ export function Dashboard() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R09 · portal · R08 · keys</span>
+        <span className={styles.badge}>R15 · useOptimistic · R09 · R08</span>
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.lead}>
-          “Ver detalle” abre un modal en <code>#modal-root</code> (Escape /
-          trap de foco). Los avisos van a <code>#toast-root</code> con{" "}
-          <code>--z-toast</code>.
+          Confirmar / completar / cancelar actualiza el badge{" "}
+          <strong>al instante</strong> (<code>useOptimistic</code>). Si el mock
+          falla, hace rollback solo.
         </p>
       </header>
+
+      <p
+        className={
+          failDemo
+            ? `${styles.callout} ${styles.calloutDanger}`
+            : styles.callout
+        }
+        role="note"
+      >
+        <strong>R15 — rollback:</strong> activá fallos del mock (~45%), cambiá
+        un estado y mirá cómo el badge vuelve al valor anterior con toast de
+        error.
+      </p>
 
       <p
         className={
@@ -159,12 +259,17 @@ export function Dashboard() {
         </button>
         <button
           type="button"
-          className={styles.todayBtn}
-          onClick={() =>
-            push({ message: "Toast de prueba (portal)", tone: "success" })
+          className={
+            failDemo
+              ? `${styles.toggleBug} ${styles.toggleBugActive}`
+              : styles.toggleBug
           }
+          aria-pressed={failDemo}
+          onClick={() => setFailDemo((v) => !v)}
         >
-          Toast demo
+          {failDemo
+            ? "Fallos mock ON (~45%)"
+            : "Fallos mock (off) — demo R15"}
         </button>
       </div>
 
@@ -221,6 +326,12 @@ export function Dashboard() {
         </p>
       )}
 
+      {isPending && !loading && (
+        <p className={styles.status} role="status" aria-live="polite">
+          Actualizando estado (optimistic)…
+        </p>
+      )}
+
       {error && (
         <p className={styles.error} role="alert">
           {error}
@@ -240,6 +351,8 @@ export function Dashboard() {
               formatTime={formatTime}
               estadoClass={estadoClass}
               onOpenDetail={handleOpenDetail}
+              onCambiarEstado={handleCambiarEstado}
+              pending={isPending}
             />
           ))}
         </ul>
@@ -272,7 +385,10 @@ export function Dashboard() {
               {selectedCita.vet.especialidad}
             </p>
             <p>
-              <strong>Estado:</strong> {selectedCita.estado}
+              <strong>Estado:</strong>{" "}
+              <span className={estadoClass(selectedCita.estado)}>
+                {selectedCita.estado}
+              </span>
             </p>
             {selectedCita.motivo && (
               <p>
