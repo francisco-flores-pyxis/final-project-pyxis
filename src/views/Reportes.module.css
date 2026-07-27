@@ -1,0 +1,117 @@
+/**
+ * Estilos de Reportes (R12) — chunk lazy.
+ */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.badge {
+  display: inline-block;
+  align-self: flex-start;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-50);
+  color: var(--color-primary-700);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-tight);
+}
+
+.lead {
+  margin: 0;
+  color: var(--color-text-soft);
+  font-size: var(--fs-sm);
+  max-width: 42rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+}
+
+.stat {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.statLabel {
+  margin: 0;
+  font-size: var(--fs-xs);
+  color: var(--color-text-mute);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.statValue {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  color: var(--color-primary-700);
+}
+
+.panel {
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--fs-lg);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 7rem 1fr 2.5rem;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--fs-sm);
+}
+
+.barTrack {
+  height: 0.65rem;
+  background: var(--color-bg);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.barFill {
+  height: 100%;
+  background: var(--color-primary-500);
+  border-radius: var(--radius-full);
+}
+
+.status {
+  margin: 0;
+  color: var(--color-text-soft);
+  font-size: var(--fs-sm);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--fs-sm);
+}

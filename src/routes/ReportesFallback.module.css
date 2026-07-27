@@ -1,0 +1,9 @@
+/**
+ * Estilos del fallback de Suspense para Reportes (R12).
+ */
+
+.fallback {
+  padding: var(--space-6);
+  color: var(--color-text-soft);
+  font-size: var(--fs-sm);
+}

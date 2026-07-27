@@ -3,12 +3,13 @@
  *
  * Responsabilidades:
  * - Mapear URLs a vistas.
- * - Montar el layout shell alrededor de las páginas.
+ * - Code-splitting de Reportes con `lazy` + `Suspense` (R12).
  *
  * Dependencias: react-router-dom, layouts, views.
- * Relación: consumido por `App.tsx`. En R12, Reportes pasará a lazy.
+ * Relación: consumido por `App.tsx`.
  */
 
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { Agenda } from "../views/Agenda";
@@ -17,7 +18,21 @@ import { DuenoPerfil } from "../views/DuenoPerfil";
 import { Duenos } from "../views/Duenos";
 import { NuevaCita } from "../views/NuevaCita";
 import { NuevoDueno } from "../views/NuevoDueno";
-import Reportes from "../views/Reportes";
+import fallbackStyles from "./ReportesFallback.module.css";
+
+/**
+ * Chunk separado: solo se descarga al navegar a /reportes.
+ * Requiere default export en `views/Reportes`.
+ */
+const Reportes = lazy(() => import("../views/Reportes"));
+
+function ReportesFallback() {
+  return (
+    <p className={fallbackStyles.fallback} role="status">
+      Cargando módulo de Reportes…
+    </p>
+  );
+}
 
 /**
  * Router de la aplicación (BrowserRouter + Routes).
@@ -33,7 +48,14 @@ export function AppRouter() {
           <Route path="duenos/nuevo" element={<NuevoDueno />} />
           <Route path="duenos/:ownerId" element={<DuenoPerfil />} />
           <Route path="citas/nueva" element={<NuevaCita />} />
-          <Route path="reportes" element={<Reportes />} />
+          <Route
+            path="reportes"
+            element={
+              <Suspense fallback={<ReportesFallback />}>
+                <Reportes />
+              </Suspense>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
