@@ -1,14 +1,15 @@
 /**
- * Formulario de nueva cita con useActionState (R14).
+ * Formulario de nueva cita con useActionState (R14) + SubmitButton (R16).
  *
  * Responsabilidades:
  * - Cargar catálogos (dueños, vets, servicios) y mascotas/slots en cascada.
  * - Enviar el alta vía action (pending/errores/éxito sin useState de submit).
+ * - El botón de envío lee `pending` con useFormStatus (hijo del form).
  *
- * Dependencias: useActionState, agendarCitaAction, vetApi, useDisponibilidad.
- * Relación: ruta `/citas/nueva`. R16 reemplazará el botón por SubmitButton.
+ * Dependencias: useActionState, agendarCitaAction, SubmitButton, useDisponibilidad.
+ * Relación: ruta `/citas/nueva`.
  *
- * Hook: useActionState.
+ * Hooks: useActionState (R14), useFormStatus vía SubmitButton (R16).
  * Patrón: form action (React 19) + validación de disponibilidad en la action.
  */
 
@@ -22,6 +23,7 @@ import {
   agendarCitaAction,
   initialAgendarCitaState,
 } from "../actions/agendarCita";
+import { SubmitButton } from "../components/SubmitButton";
 import { useToasts } from "../components/Toasts";
 import { vetApi } from "../data/mockApi";
 import type { Owner, Pet, Service, Vet } from "../domain/models";
@@ -135,12 +137,13 @@ export function NuevaCita() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R14 · useActionState</span>
+        <span className={styles.badge}>R16 · useFormStatus · R14</span>
         <h1 className={styles.title}>Nueva cita</h1>
         <p className={styles.lead}>
-          El submit es una <strong>action</strong>: pending, errores y éxito
-          vienen de <code>useActionState</code>. La disponibilidad se valida en
-          la action (no con un onSubmit + tres useState).
+          El submit es una <strong>action</strong> (
+          <code>useActionState</code>). El botón no recibe{" "}
+          <code>pending</code> por props: <code>SubmitButton</code> lo lee con{" "}
+          <code>useFormStatus</code> desde adentro del form.
         </p>
       </header>
 
@@ -336,9 +339,7 @@ export function NuevaCita() {
           />
         </div>
 
-        <button type="submit" className={styles.submit} disabled={isPending}>
-          {isPending ? "Agendando…" : "Agendar cita"}
-        </button>
+        <SubmitButton pendingLabel="Agendando…">Agendar cita</SubmitButton>
         {isPending && (
           <p className={styles.status} role="status">
             Validando disponibilidad y guardando…
