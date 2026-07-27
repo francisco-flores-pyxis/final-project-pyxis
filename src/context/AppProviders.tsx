@@ -1,13 +1,14 @@
 /**
- * Composición de providers globales (R05).
+ * Composición de providers globales (R05 + R09).
  *
  * Responsabilidades:
- * - Montar Session + Theme en el orden correcto alrededor de la app.
+ * - Montar Session, Theme y Toasts alrededor de la app.
  *
- * Relación: usado por `App.tsx`. Mantener providers acá evita ensuciar el entry.
+ * Relación: usado por `App.tsx`.
  */
 
 import type { ReactNode } from "react";
+import { ToastProvider } from "../components/Toasts";
 import { SessionProvider } from "./SessionContext";
 import { ThemeProvider } from "./ThemeContext";
 
@@ -21,7 +22,9 @@ interface AppProvidersProps {
 export function AppProviders({ children }: AppProvidersProps) {
   return (
     <SessionProvider>
-      <ThemeProvider>{children}</ThemeProvider>
+      <ThemeProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </ThemeProvider>
     </SessionProvider>
   );
 }

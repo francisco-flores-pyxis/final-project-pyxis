@@ -1,13 +1,10 @@
 /**
- * Fila de cita con estado local (R08).
+ * Fila de cita con estado local (R08) + apertura de detalle (R09).
  *
  * Responsabilidades:
  * - Mostrar datos de la cita.
- * - Mantener una nota local en `useState` para evidenciar la reconciliación:
- *   si la key es el índice, al reordenar la nota "salta" de cita.
- *
- * Dependencias: CSS Module del Dashboard (estilos de fila).
- * Relación: renderizada por `Dashboard` con `key={cita.id}` (producción).
+ * - Nota local para demo de keys (R08).
+ * - Botón para abrir modal de detalle (R09).
  */
 
 import { useState, type ChangeEvent } from "react";
@@ -18,12 +15,18 @@ export interface CitaRowProps {
   cita: AppointmentView;
   formatTime: (iso: string) => string;
   estadoClass: (estado: EstadoCita) => string;
+  onOpenDetail: (cita: AppointmentView) => void;
 }
 
 /**
- * Item de lista con input propio — el estado vive en la instancia del componente.
+ * Item de lista con input propio y acción de detalle.
  */
-export function CitaRow({ cita, formatTime, estadoClass }: CitaRowProps) {
+export function CitaRow({
+  cita,
+  formatTime,
+  estadoClass,
+  onOpenDetail,
+}: CitaRowProps) {
   const [notaLocal, setNotaLocal] = useState("");
 
   function handleNotaChange(event: ChangeEvent<HTMLInputElement>) {
@@ -57,6 +60,13 @@ export function CitaRow({ cita, formatTime, estadoClass }: CitaRowProps) {
           placeholder="Escribí acá y después reordená/filtrá…"
           autoComplete="off"
         />
+        <button
+          type="button"
+          className={styles.detailBtn}
+          onClick={() => onOpenDetail(cita)}
+        >
+          Ver detalle
+        </button>
       </div>
       <span className={estadoClass(cita.estado)}>{cita.estado}</span>
     </li>

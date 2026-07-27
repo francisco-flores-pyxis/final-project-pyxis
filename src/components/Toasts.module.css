@@ -1,0 +1,56 @@
+/**
+ * Estilos de toasts (R09). Stack fijo con --z-toast.
+ */
+
+.stack {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: min(22rem, calc(100vw - var(--space-8)));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  font-size: var(--fs-sm);
+}
+
+.info {
+  border-color: var(--color-info);
+}
+
+.success {
+  border-color: var(--color-success);
+}
+
+.danger {
+  border-color: var(--color-danger);
+}
+
+.dismiss {
+  border: none;
+  background: transparent;
+  color: var(--color-text-mute);
+  font-size: var(--fs-lg);
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 var(--space-1);
+}
+
+.dismiss:hover {
+  color: var(--color-text);
+}

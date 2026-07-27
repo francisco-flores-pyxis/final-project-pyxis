@@ -1,19 +1,18 @@
 /**
- * Dashboard — citas del día (R02 + R06 + R08).
+ * Dashboard — citas del día (R02 + R06 + R08 + R09).
  *
  * Responsabilidades:
- * - Cargar citas con `useCitas`.
- * - Filtrar / ordenar la lista.
- * - Usar keys estables por `id` (R08) y demo reproducible del bug `key={index}`.
+ * - Cargar / filtrar / ordenar citas.
+ * - Keys estables + demo del bug de índice (R08).
+ * - Modal de detalle + toasts vía portals (R09).
  *
- * Dependencias: useCitas, CitaRow, CSS Module.
- * Relación: ruta `/`.
- *
- * Capacidad R08: keys y reconciliación.
+ * Dependencias: useCitas, CitaRow, Modal, useToasts, CSS Module.
  */
 
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import { CitaRow } from "../components/dashboard/CitaRow";
+import { Modal } from "../components/Modal";
+import { useToasts } from "../components/Toasts";
 import type { AppointmentView, EstadoCita } from "../domain/models";
 import { useCitas } from "../hooks/useCitas";
 import { todayLocalISODate } from "../utils/date";
@@ -22,9 +21,6 @@ import styles from "./Dashboard.module.css";
 type EstadoFiltro = "todas" | EstadoCita;
 type Orden = "hora-asc" | "hora-desc" | "vet";
 
-/**
- * Formatea la hora de una cita en locale es-UY.
- */
 function formatTime(iso: string): string {
   return new Intl.DateTimeFormat("es-UY", {
     hour: "2-digit",
@@ -33,9 +29,14 @@ function formatTime(iso: string): string {
   }).format(new Date(iso));
 }
 
-/**
- * Clase CSS según estado de la cita.
- */
+function formatDateTime(iso: string): string {
+  return new Intl.DateTimeFormat("es-UY", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "America/Montevideo",
+  }).format(new Date(iso));
+}
+
 function estadoClass(estado: EstadoCita): string {
   const map: Record<EstadoCita, string> = {
     pendiente: styles.estadoPendiente,
@@ -46,9 +47,6 @@ function estadoClass(estado: EstadoCita): string {
   return `${styles.estado} ${map[estado]}`;
 }
 
-/**
- * Filtra y ordena citas para la lista del dashboard.
- */
 function applyListTransforms(
   citas: AppointmentView[],
   estado: EstadoFiltro,
@@ -70,23 +68,36 @@ function applyListTransforms(
 }
 
 /**
- * Vista principal del día operativo + demo de keys (R08).
+ * Vista principal del día operativo.
  */
 export function Dashboard() {
+  const { push } = useToasts();
   const [date, setDate] = useState(todayLocalISODate);
   const [estadoFiltro, setEstadoFiltro] = useState<EstadoFiltro>("todas");
   const [orden, setOrden] = useState<Orden>("hora-asc");
-  /**
-   * SOLO para la demo pedagógica. En producción siempre keys por id.
-   * true → key={index} (bug); false → key={cita.id} (correcto).
-   */
   const [useIndexKeys, setUseIndexKeys] = useState(false);
+  const [selectedCita, setSelectedCita] = useState<AppointmentView | null>(null);
 
   const { data: citas, loading, error, refetch } = useCitas(date);
 
   const visibleCitas = useMemo(
     () => applyListTransforms(citas, estadoFiltro, orden),
     [citas, estadoFiltro, orden],
+  );
+
+  const handleCloseModal = useCallback(() => {
+    setSelectedCita(null);
+  }, []);
+
+  const handleOpenDetail = useCallback(
+    (cita: AppointmentView) => {
+      setSelectedCita(cita);
+      push({
+        message: `Detalle de ${cita.pet.nombre} (portal #modal-root)`,
+        tone: "info",
+      });
+    },
+    [push],
   );
 
   function handleDateChange(event: ChangeEvent<HTMLInputElement>) {
@@ -96,12 +107,12 @@ export function Dashboard() {
   return (
     <section className={styles.page}>
       <header className={styles.header}>
-        <span className={styles.badge}>R08 · keys · R06 · useCitas</span>
+        <span className={styles.badge}>R09 · portal · R08 · keys</span>
         <h1 className={styles.title}>Dashboard</h1>
         <p className={styles.lead}>
-          Lista filtrable/ordenable. Cada fila tiene una nota local: con{" "}
-          <code>key=&#123;id&#125;</code> la nota viaja con la cita; con{" "}
-          <code>key=&#123;index&#125;</code> “salta” al reordenar.
+          “Ver detalle” abre un modal en <code>#modal-root</code> (Escape /
+          trap de foco). Los avisos van a <code>#toast-root</code> con{" "}
+          <code>--z-toast</code>.
         </p>
       </header>
 
@@ -113,11 +124,9 @@ export function Dashboard() {
         }
         role="note"
       >
-        <strong>Cómo reproducir el bug:</strong> 1) activá “Keys por índice”.
-        2) Escribí una nota en la primera fila. 3) Cambiá el orden (hora desc /
-        vet) o el filtro. 4) La nota queda en la posición, no en la cita. 5)
-        Desactivá el modo índice: la nota permanece con el <code>id</code>{" "}
-        correcto.
+        <strong>R08 — bug de keys:</strong> activá “Keys por índice”, escribí
+        una nota, reordená/filtrá y mirá cómo salta. Con{" "}
+        <code>key=&#123;id&#125;</code> la nota viaja con la cita.
       </p>
 
       <div className={styles.toolbar}>
@@ -147,6 +156,15 @@ export function Dashboard() {
           disabled={loading}
         >
           Refetch
+        </button>
+        <button
+          type="button"
+          className={styles.todayBtn}
+          onClick={() =>
+            push({ message: "Toast de prueba (portal)", tone: "success" })
+          }
+        >
+          Toast demo
         </button>
       </div>
 
@@ -217,15 +235,66 @@ export function Dashboard() {
         <ul className={styles.list}>
           {visibleCitas.map((cita, index) => (
             <CitaRow
-              // Producción: cita.id. Demo: index (anti-patrón a propósito).
               key={useIndexKeys ? index : cita.id}
               cita={cita}
               formatTime={formatTime}
               estadoClass={estadoClass}
+              onOpenDetail={handleOpenDetail}
             />
           ))}
         </ul>
       )}
+
+      <Modal
+        open={selectedCita !== null}
+        title={
+          selectedCita
+            ? `Cita · ${selectedCita.pet.nombre}`
+            : "Detalle de cita"
+        }
+        onClose={handleCloseModal}
+      >
+        {selectedCita && (
+          <>
+            <p>
+              <strong>Cuándo:</strong> {formatDateTime(selectedCita.fechaHora)}
+            </p>
+            <p>
+              <strong>Dueño:</strong> {selectedCita.owner.nombre}{" "}
+              {selectedCita.owner.apellido}
+            </p>
+            <p>
+              <strong>Servicio:</strong> {selectedCita.service.nombre} (
+              {selectedCita.service.duracionMin} min)
+            </p>
+            <p>
+              <strong>Vet:</strong> {selectedCita.vet.nombre} —{" "}
+              {selectedCita.vet.especialidad}
+            </p>
+            <p>
+              <strong>Estado:</strong> {selectedCita.estado}
+            </p>
+            {selectedCita.motivo && (
+              <p>
+                <strong>Motivo:</strong> {selectedCita.motivo}
+              </p>
+            )}
+            <button
+              type="button"
+              className={styles.todayBtn}
+              onClick={() => {
+                push({
+                  message: "Modal cerrado desde el detalle",
+                  tone: "success",
+                });
+                handleCloseModal();
+              }}
+            >
+              Cerrar y notificar
+            </button>
+          </>
+        )}
+      </Modal>
     </section>
   );
 }
