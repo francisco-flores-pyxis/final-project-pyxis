@@ -1,27 +1,92 @@
 /**
- * Perfil del dueño — mascotas + historial (R10).
+ * Perfil del dueño — mascotas + historial con `use()` + Suspense (R13).
  *
  * Responsabilidades:
- * - Cargar dueño, mascotas e historial (fetch clásico; R13 pasará a `use`+Suspense).
- * - Aislar el historial con `ErrorBoundary` (fallback + retry).
- * - Demostrar que un crash en historial NO tumba la sección de mascotas.
+ * - Leer Promises del mock con `use(promise)` (sin loading manual / useEffect).
+ * - Dos `<Suspense>` independientes: mascotas (rápido) e historial (lento).
+ * - Mantener Error Boundary de R10 solo alrededor del historial.
  *
- * Dependencias: ErrorBoundary, vetApi, react-router params.
+ * Dependencias: React `use` + Suspense, ErrorBoundary, vetApi (cache de Promises).
  * Relación: ruta `/duenos/:ownerId`.
  *
- * Capacidad R10: Error Boundary.
- * Supuesto: sin card detallada en §5 → checklist “historial aislado + retry”.
+ * Capacidad: `use` + Suspense (React 19).
+ * Gotcha: la Promise DEBE ser estable (mock memoriza por clave). Crear una
+ * nueva en cada render → loop infinito de suspensión.
  */
 
-import { useEffect, useState } from "react";
+import { Suspense, use, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { vetApi } from "../data/mockApi";
-import type { AppointmentView, Owner, Pet } from "../domain/models";
 import styles from "./DuenoPerfil.module.css";
 
 /**
- * Panel de historial. Puede lanzar en render para demostrar el boundary.
+ * Skeleton genérico para fallbacks de Suspense.
+ */
+function SectionSkeleton({ label }: { label: string }) {
+  return (
+    <div className={styles.skeleton} aria-busy="true" aria-label={`Cargando ${label}`}>
+      <div className={styles.skeletonLine} />
+      <div className={`${styles.skeletonLine} ${styles.skeletonLineShort}`} />
+      <div className={styles.skeletonLine} />
+    </div>
+  );
+}
+
+/**
+ * Cabecera del dueño — también vía `use()` (Promise cacheada `dueno:id`).
+ */
+function OwnerHeader({ ownerId }: { ownerId: string }) {
+  const owner = use(vetApi.getDueno(ownerId));
+
+  return (
+    <header className={styles.header}>
+      <span className={styles.badge}>R13 · use + Suspense · R10 · Error Boundary</span>
+      <h1 className={styles.title}>
+        {owner.nombre} {owner.apellido}
+      </h1>
+      <p className={styles.lead}>
+        Mascotas e historial suspenden por separado: el mock demora ~300 ms vs
+        ~900 ms. Sin <code>useEffect</code> ni flags de loading — el loading lo
+        maneja Suspense.
+      </p>
+      <p className={styles.meta}>
+        {owner.email} · {owner.telefono}
+        {owner.direccion ? ` · ${owner.direccion}` : ""}
+      </p>
+      <Link className={styles.backLink} to="/duenos">
+        ← Dueños
+      </Link>
+    </header>
+  );
+}
+
+/**
+ * Panel de mascotas — Promise estable `mascotas:ownerId`.
+ */
+function MascotasPanel({ ownerId }: { ownerId: string }) {
+  const pets = use(vetApi.getMascotasDeDueno(ownerId));
+
+  if (pets.length === 0) {
+    return <p className={styles.status}>Sin mascotas registradas.</p>;
+  }
+
+  return (
+    <ul className={styles.list}>
+      {pets.map((pet) => (
+        <li key={pet.id} className={styles.listItem}>
+          <strong>{pet.nombre}</strong> · {pet.especie}
+          {pet.raza ? ` · ${pet.raza}` : ""}
+          {pet.pesoKg != null ? ` · ${pet.pesoKg} kg` : ""}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Panel de historial — Promise estable `historial:ownerId` (más lenta).
+ * `forceCrash` demuestra el Error Boundary sin tumbar mascotas.
  */
 function HistorialPanel({
   ownerId,
@@ -30,50 +95,12 @@ function HistorialPanel({
   ownerId: string;
   forceCrash: boolean;
 }) {
-  const [items, setItems] = useState<AppointmentView[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const items = use(vetApi.getHistorialCitas(ownerId));
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    vetApi
-      .getHistorialCitas(ownerId)
-      .then((data) => {
-        if (cancelled) return;
-        setItems(data);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : "No se pudo cargar el historial.",
-        );
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ownerId]);
-
-  // Los Error Boundaries atrapan errores de *render*, no de Promises.
   if (forceCrash) {
     throw new Error(
       "Error simulado en HistorialPanel (render). Las mascotas deben seguir visibles.",
     );
-  }
-
-  if (loading) {
-    return <p className={styles.status}>Cargando historial…</p>;
-  }
-
-  if (error) {
-    return <p className={styles.error}>{error}</p>;
   }
 
   if (items.length === 0) {
@@ -100,106 +127,25 @@ function HistorialPanel({
 }
 
 /**
- * Vista de perfil: dos columnas; solo historial está detrás del boundary.
+ * Contenido del perfil una vez conocido el ownerId.
  */
-export function DuenoPerfil() {
-  const { ownerId = "" } = useParams<{ ownerId: string }>();
-  const [owner, setOwner] = useState<Owner | null>(null);
-  const [pets, setPets] = useState<Pet[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+function DuenoPerfilContent({ ownerId }: { ownerId: string }) {
   const [forceHistorialCrash, setForceHistorialCrash] = useState(false);
-
-  useEffect(() => {
-    if (!ownerId) return;
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    setForceHistorialCrash(false);
-
-    Promise.all([vetApi.getDueno(ownerId), vetApi.getMascotasDeDueno(ownerId)])
-      .then(([dueno, mascotas]) => {
-        if (cancelled) return;
-        setOwner(dueno);
-        setPets(mascotas);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(
-          err instanceof Error ? err.message : "No se pudo cargar el perfil.",
-        );
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [ownerId]);
-
-  if (!ownerId) {
-    return <p className={styles.error}>Falta el id del dueño en la URL.</p>;
-  }
-
-  if (loading) {
-    return (
-      <section className={styles.page}>
-        <p className={styles.status}>Cargando perfil…</p>
-      </section>
-    );
-  }
-
-  if (error || !owner) {
-    return (
-      <section className={styles.page}>
-        <p className={styles.error}>{error ?? "Dueño no encontrado."}</p>
-        <Link className={styles.backLink} to="/duenos">
-          ← Volver a dueños
-        </Link>
-      </section>
-    );
-  }
 
   return (
     <section className={styles.page}>
-      <header className={styles.header}>
-        <span className={styles.badge}>R10 · Error Boundary</span>
-        <h1 className={styles.title}>
-          {owner.nombre} {owner.apellido}
-        </h1>
-        <p className={styles.lead}>
-          El historial está envuelto en un Error Boundary: si crashea el render,
-          las mascotas siguen visibles y podés reintentar.
-        </p>
-        <p className={styles.meta}>
-          {owner.email} · {owner.telefono}
-          {owner.direccion ? ` · ${owner.direccion}` : ""}
-        </p>
-        <Link className={styles.backLink} to="/duenos">
-          ← Dueños
-        </Link>
-      </header>
+      <Suspense fallback={<SectionSkeleton label="dueño" />}>
+        <OwnerHeader ownerId={ownerId} />
+      </Suspense>
 
       <div className={styles.grid}>
         <section className={styles.panel} aria-labelledby="mascotas-title">
           <h2 id="mascotas-title" className={styles.panelTitle}>
             Mascotas
           </h2>
-          {pets.length === 0 ? (
-            <p className={styles.status}>Sin mascotas registradas.</p>
-          ) : (
-            <ul className={styles.list}>
-              {pets.map((pet) => (
-                <li key={pet.id} className={styles.listItem}>
-                  <strong>{pet.nombre}</strong> · {pet.especie}
-                  {pet.raza ? ` · ${pet.raza}` : ""}
-                  {pet.pesoKg != null ? ` · ${pet.pesoKg} kg` : ""}
-                </li>
-              ))}
-            </ul>
-          )}
+          <Suspense fallback={<SectionSkeleton label="mascotas" />}>
+            <MascotasPanel ownerId={ownerId} />
+          </Suspense>
         </section>
 
         <section className={styles.panel} aria-labelledby="historial-title">
@@ -232,13 +178,28 @@ export function DuenoPerfil() {
               </div>
             )}
           >
-            <HistorialPanel
-              ownerId={ownerId}
-              forceCrash={forceHistorialCrash}
-            />
+            <Suspense fallback={<SectionSkeleton label="historial" />}>
+              <HistorialPanel
+                ownerId={ownerId}
+                forceCrash={forceHistorialCrash}
+              />
+            </Suspense>
           </ErrorBoundary>
         </section>
       </div>
     </section>
   );
+}
+
+/**
+ * Vista de perfil: lee `ownerId` de la ruta y delega en Suspense.
+ */
+export function DuenoPerfil() {
+  const { ownerId = "" } = useParams<{ ownerId: string }>();
+
+  if (!ownerId) {
+    return <p className={styles.error}>Falta el id del dueño en la URL.</p>;
+  }
+
+  return <DuenoPerfilContent ownerId={ownerId} />;
 }
