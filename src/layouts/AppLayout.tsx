@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { to: "/duenos", label: "Dueños" },
   { to: "/duenos/nuevo", label: "Nuevo dueño" },
   { to: "/citas/nueva", label: "Nueva cita" },
+  { to: "/presentacion", label: "Presentación" },
   { to: "/reportes", label: "Reportes" },
 ] as const;
 
