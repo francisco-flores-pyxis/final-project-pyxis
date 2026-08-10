@@ -18,6 +18,7 @@ import { DuenoPerfil } from "../views/DuenoPerfil";
 import { Duenos } from "../views/Duenos";
 import { NuevaCita } from "../views/NuevaCita";
 import { NuevoDueno } from "../views/NuevoDueno";
+import { Presentation } from "../views/Presentation";
 import fallbackStyles from "./ReportesFallback.module.css";
 
 /**
@@ -48,6 +49,7 @@ export function AppRouter() {
           <Route path="duenos/nuevo" element={<NuevoDueno />} />
           <Route path="duenos/:ownerId" element={<DuenoPerfil />} />
           <Route path="citas/nueva" element={<NuevaCita />} />
+          <Route path="presentacion" element={<Presentation />} />
           <Route
             path="reportes"
             element={
